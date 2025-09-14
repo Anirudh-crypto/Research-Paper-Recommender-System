@@ -1,0 +1,11 @@
+# Environment files
+*.env
+
+# database files
+*.db
+faiss.index
+id_map.json
+
+#python cache
+__pycache__/
+*.pyc

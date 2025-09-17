@@ -1,57 +1,38 @@
-# app/faiss_index.py
-import os
-import json
-import numpy as np
 import faiss
+import numpy as np
+from sqlalchemy.orm import Session
+from app.models import Paper
 
-class FaissIndex:
-    def __init__(self, dim=384, index_path="faiss.index", map_path="id_map.json"):
-        self.dim = dim
-        self.index_path = index_path
-        self.map_path = map_path
-        self._load_or_create()
+class VectorStore:
+    def __init__(self, dim: int = 384):  # 384 = MiniLM embedding size
+        self.index = faiss.IndexFlatL2(dim)  # L2 = Euclidean distance
+        self.paper_ids = []  # mapping FAISS index → DB id
 
-    def _load_or_create(self):
-        if os.path.exists(self.index_path) and os.path.exists(self.map_path):
-            self.index = faiss.read_index(self.index_path)
-            with open(self.map_path, "r") as f:
-                self.id_map = json.load(f)   # keys: str(index_position) -> paper_id
-        else:
-            # We'll use inner-product after normalizing vectors for cosine similarity
-            self.index = faiss.IndexFlatIP(self.dim)
-            self.id_map = {}
+    def build(self, db: Session):
+        """Load all embeddings from DB into FAISS"""
+        papers = db.query(Paper).filter(Paper.embedding.isnot(None)).all()
+        vectors = [p.embedding for p in papers]
+        ids = [p.id for p in papers]
 
-    def add(self, vectors: np.ndarray, paper_ids):
-        """
-        vectors: (N, dim) float32, already normalized (if using IP)
-        paper_ids: list of paper ids (ints)
-        """
-        if vectors.dtype != np.float32:
-            vectors = vectors.astype('float32')
-        start = self.index.ntotal
-        self.index.add(vectors)
-        for i, pid in enumerate(paper_ids):
-            self.id_map[str(start + i)] = int(pid)
-        self.save()
+        if vectors:
+            matrix = np.array(vectors).astype("float32")
+            self.index.add(matrix)
+            self.paper_ids = ids
 
-    def save(self):
-        faiss.write_index(self.index, self.index_path)
-        with open(self.map_path, "w") as f:
-            json.dump(self.id_map, f)
+    def add(self, paper_id: int, embedding: list):
+        """Add a single paper embedding"""
+        vector = np.array([embedding]).astype("float32")
+        self.index.add(vector)
+        self.paper_ids.append(paper_id)
 
-    def search(self, vector: np.ndarray, k=5):
-        """
-        vector: (1, dim) float32 and normalized
-        returns: list of paper_ids in ranked order
-        """
-        if self.index.ntotal == 0:
-            return []
-        D, I = self.index.search(vector, k)
-        result = []
-        for idx in I[0]:
-            if int(idx) < 0:
-                continue
-            pid = self.id_map.get(str(int(idx)))
-            if pid is not None:
-                result.append(int(pid))
-        return result
+    def search(self, query_embedding: list, k: int = 5):
+        """Return top-k most similar paper IDs"""
+        vector = np.array([query_embedding]).astype("float32")
+        distances, indices = self.index.search(vector, k)
+        results = []
+        for idx in indices[0]:
+            if idx < len(self.paper_ids):
+                results.append(self.paper_ids[idx])
+        return results
+
+vector_store = VectorStore()

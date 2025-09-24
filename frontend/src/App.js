@@ -15,6 +15,7 @@ function App() {
   const [yearMin, setYearMin] = useState("");
   const [yearMax, setYearMax] = useState("");
   const [authorFilter, setAuthorFilter] = useState("");
+  const [titleSearch, setTitleSearch] = useState("");
   const [sortOption, setSortOption] = useState("newest");
 
   // Fetch the papers at the beginning to display ingested papers
@@ -37,19 +38,28 @@ function App() {
         setLoadingIngested(false);
       }
     };
-
     fetchPapers();
   }, []);
 
+  // Combine papers
   const combinedPapers = [...ingestedPapers, ...recommendedPapers];
 
+  // Apply filters & search
   const filteredPapers = combinedPapers.filter((paper) => {
-    const matchesYearMin = yearMin ? paper.year >= Number(yearMin) : true;
-    const matchesYearMax = yearMax ? paper.year <= Number(yearMax) : true;
+    const authorsText = paper.authors || "";
     const matchesAuthor = authorFilter
-      ? paper.authors.toLowerCase().includes(authorFilter.toLowerCase())
+      ? authorsText.toLowerCase().includes(authorFilter.toLowerCase())
       : true;
-    return matchesYearMin && matchesYearMax && matchesAuthor;
+
+    const matchesYearMin = yearMin ? paper.publication_year >= Number(yearMin) : true;
+    const matchesYearMax = yearMax ? paper.publication_year <= Number(yearMax) : true;
+
+    const titleText = paper.title || "";
+    const matchesTitle = titleSearch
+      ? titleText.toLowerCase().includes(titleSearch.toLowerCase())
+      : true;
+
+    return matchesAuthor && matchesYearMin && matchesYearMax && matchesTitle;
   });
 
   // Sort papers based on publication year or title
@@ -68,11 +78,23 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="max-w-6xl mx-auto space-y-6">
+        {/* Title Search */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <input
+            type="text"
+            placeholder="Search papers by title..."
+            value={titleSearch}
+            onChange={(e) => setTitleSearch(e.target.value)}
+            className="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+          />
+        </div>
+
+        {/* Ingest + Recommend Forms */}
         <IngestForm onIngest={(newPapers) => setIngestedPapers(newPapers)} />
         <RecommendForm onRecommend={(recommended) => setRecommendedPapers(recommended)} />
 
-        {/* Toggle combined view */}
+        {/* Combined / Separate toggle */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <button
             onClick={() => setShowCombined(!showCombined)}
@@ -94,7 +116,7 @@ function App() {
                 <option value="title">Sort by Title</option>
               </select>
 
-              {/* Year filter */}
+              {/* Year filters */}
               <input
                 type="number"
                 placeholder="Year Min"
@@ -122,13 +144,28 @@ function App() {
           )}
         </div>
 
-        {/* Paper lists */}
+        {/* Paper Lists */}
         {showCombined ? (
-          <PaperList title="All Papers" papers={sortedPapers} />
+          <PaperList
+            title="All Papers"
+            papers={sortedPapers}
+            highlightText={authorFilter}
+            highlightTitle={titleSearch}
+          />
         ) : (
           <>
-            <PaperList title="Ingested Papers" papers={ingestedPapers} loading={loadingIngested} />
-            <PaperList title="Recommended Papers" papers={recommendedPapers} loading={loadingRecommended} />
+            <PaperList
+              title="Ingested Papers"
+              papers={ingestedPapers}
+              loading={loadingIngested}
+              highlightTitle={titleSearch}
+            />
+            <PaperList
+              title="Recommended Papers"
+              papers={recommendedPapers}
+              loading={loadingRecommended}
+              highlightTitle={titleSearch}
+            />
           </>
         )}
       </div>

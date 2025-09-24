@@ -93,5 +93,5 @@ def list_papers(limit: int = 20, db: Session = Depends(get_db)):
     ps = db.query(Paper).limit(limit).all()
     out = []
     for p in ps:
-        out.append({"id": p.id, "title": p.title, "abstract": p.abstract, "year": p.publication_year, "arxiv_id": p.arxiv_id})
+        out.append({"id": p.id, "title": p.title, "authors": p.authors, "abstract": p.abstract, "year": p.publication_year, "arxiv_id": p.arxiv_id, "url": p.url})
     return {"count": len(out), "papers": out}
